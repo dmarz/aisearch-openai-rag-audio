@@ -6,9 +6,11 @@ from aiohttp import web
 from azure.core.credentials import AzureKeyCredential
 from azure.identity import AzureDeveloperCliCredential, DefaultAzureCredential
 from dotenv import load_dotenv
+import aiohttp_cors
 
 from ragtools import attach_rag_tools
 from rtmt import RTMiddleTier
+from avatar_service import AvatarService
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("voicerag")
@@ -33,6 +35,20 @@ async def create_app():
     search_credential = AzureKeyCredential(search_key) if search_key else credential
     
     app = web.Application()
+    
+    # Setup CORS
+    cors = aiohttp_cors.setup(app, defaults={
+        "*": aiohttp_cors.ResourceOptions(
+            allow_credentials=True,
+            expose_headers="*",
+            allow_headers="*",
+            allow_methods="*"
+        )
+    })
+
+    # Initialize avatar service
+    avatar_service = AvatarService(credentials=llm_credential)
+    avatar_service.setup_routes(app)
 
     rtmt = RTMiddleTier(
         credentials=llm_credential,
@@ -67,6 +83,10 @@ async def create_app():
     current_directory = Path(__file__).parent
     app.add_routes([web.get('/', lambda _: web.FileResponse(current_directory / 'static/index.html'))])
     app.router.add_static('/', path=current_directory / 'static', name='static')
+    
+    # Add CORS to all routes
+    for route in list(app.router.routes()):
+        cors.add(route)
     
     return app
 
